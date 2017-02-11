@@ -6,6 +6,7 @@
 #include "stdafx.h"
 #include <functional>
 #include "Basics.h"
+#include "Constants.h"
 #include "MPIWrapper.h"
 #include "CNTKLibrary.h"
 #include "DistributedCommunicator.h"
@@ -28,9 +29,9 @@ namespace CNTK
         }
     }
 
-    DistributedCommunicatorPtr MPICommunicator()
+    DistributedCommunicatorPtr MPICommunicator(size_t packThresholdSizeInBytes)
     {
-        return std::make_shared<MPICommunicatorImpl>();
+        return std::make_shared<MPICommunicatorImpl>(packThresholdSizeInBytes);
     }
 
     void DistributedCommunicator::Finalize()
@@ -64,7 +65,7 @@ namespace CNTK
         return nullptr; // Make compiler happy.
     }
 
-    MPICommunicatorImpl::MPICommunicatorImpl()
+    MPICommunicatorImpl::MPICommunicatorImpl(size_t packThresholdSizeInBytes)
     {
         m_mpi = MPIWrapper::GetInstance();
         if (m_mpi == nullptr)
@@ -81,6 +82,7 @@ namespace CNTK
                 // TOOD: Nodes have to exchange their names.
                 m_workers.insert({ i,  L"" });
         }
+        m_packThresholdSizeInBytes = packThresholdSizeInBytes;
     }
 
     void MPICommunicatorImpl::Initialize(const std::vector<NDArrayViewPtr>& values)
@@ -300,12 +302,99 @@ namespace CNTK
         if (numValues == 0)
             return;
 
-        Initialize(inputValues);
+        std::vector<NDArrayViewPtr> valuesToAggregate; // Corresponding to inputValues
+        std::vector<NDArrayViewPtr> valuesAfterAggregate; // Corresponding to outputValues
+        size_t packedFloatGradientsSizeInBytes = 0;
+        size_t packedDoubleGradientsSizeInBytes = 0;
+        std::vector<size_t> packedFloatGradientsIndex;
+        std::vector<size_t> packedDoubleGradientsIndex;
+        for (auto i = 0; i < numValues; i++)
+        {
+            // Push index to packing queue if the gradient's size is less than threshold size
+            if (GetBufferSize(inputValues[i]) < m_packThresholdSizeInBytes && (inputValues[i]->GetDataType() == DataType::Float))
+            {
+                packedFloatGradientsSizeInBytes += GetBufferSize(inputValues[i]);
+                packedFloatGradientsIndex.push_back(i);
+            }
+            else if (GetBufferSize(inputValues[i]) < m_packThresholdSizeInBytes && (inputValues[i]->GetDataType() == DataType::Double))
+            {
+                packedDoubleGradientsSizeInBytes += GetBufferSize(inputValues[i]);
+                packedDoubleGradientsIndex.push_back(i);
+            }
+            else
+            {
+                valuesToAggregate.push_back(inputValues[i]);
+                valuesAfterAggregate.push_back(outputValues[i]);
+            }
+        }
+
+        std::unique_ptr<Matrix<float>> aggregationBufferFloat;
+        std::unique_ptr<Matrix<double>> aggregationBufferDouble;
+        // Do the packing to reduce the number of MPI requests.
+        if (packedFloatGradientsIndex.size() > 1)
+        {
+            aggregationBufferFloat.reset(new (std::nothrow) Matrix<float>(1, packedFloatGradientsSizeInBytes / sizeof(float),
+                inputValues[packedFloatGradientsIndex[0]]->Device().Id()));
+        }
+        if (packedDoubleGradientsIndex.size() > 1)
+        {
+            aggregationBufferDouble.reset(new (std::nothrow) Matrix<double>(1, packedDoubleGradientsSizeInBytes / sizeof(double),
+                inputValues[packedDoubleGradientsIndex[0]]->Device().Id()));
+        }
+
+        if (aggregationBufferFloat == nullptr && aggregationBufferDouble == nullptr)
+        {
+            packedFloatGradientsSizeInBytes = 0;
+            packedFloatGradientsIndex.clear();
+            packedDoubleGradientsSizeInBytes = 0;
+            packedDoubleGradientsIndex.clear();
+            valuesToAggregate.clear();
+            valuesAfterAggregate.clear();
+            valuesToAggregate = inputValues;
+            valuesAfterAggregate = outputValues;
+        }
+        else
+        {
+            if (aggregationBufferFloat != nullptr)
+            {
+                size_t offset = 0;
+                for (size_t i : packedFloatGradientsIndex)
+                {
+                    auto gradient = GetWritableMatrix<float>(inputValues[i]);
+                    aggregationBufferFloat->ColumnSlice(offset, gradient->GetNumElements()).AssignValuesOf(gradient->Reshaped(1, gradient->GetNumElements()));
+                    offset += gradient->GetNumElements();
+                }
+                ::CNTK::NDShape shape{ aggregationBufferFloat->GetNumElements() };
+                auto data = ::CNTK::MakeSharedObject<::CNTK::NDArrayView>(DataType::Float, shape, aggregationBufferFloat->Data(),
+                    packedFloatGradientsSizeInBytes, inputValues[packedFloatGradientsIndex[0]]->Device());
+                valuesToAggregate.push_back(data);
+                valuesAfterAggregate.push_back(data);
+            }
+
+            if (aggregationBufferDouble != nullptr)
+            {
+                size_t offset = 0;
+                for (size_t i : packedDoubleGradientsIndex)
+                {
+                    auto gradient = GetWritableMatrix<double>(inputValues[i]);
+                    aggregationBufferDouble->ColumnSlice(offset, gradient->GetNumElements()).AssignValuesOf(gradient->Reshaped(1, gradient->GetNumElements()));
+                    offset += gradient->GetNumElements();
+                }
+                ::CNTK::NDShape shape{ aggregationBufferDouble->GetNumElements() };
+                auto data = ::CNTK::MakeSharedObject<::CNTK::NDArrayView>(DataType::Float, shape, aggregationBufferDouble->Data(),
+                    packedDoubleGradientsSizeInBytes, inputValues[packedDoubleGradientsIndex[0]]->Device());
+                valuesToAggregate.push_back(data);
+                valuesAfterAggregate.push_back(data);
+            }
+        }
+        numValues = valuesToAggregate.size();
+
+        Initialize(valuesToAggregate);
 
         // for all values residing on GPU initiate async transfer to CPU buffers.
         for (auto i = 0; i < numValues; ++i)
         {
-            auto view = inputValues[i];
+            auto view = valuesToAggregate[i];
             if (view->Device() != DeviceDescriptor::CPUDevice())
             {
                 auto& transferer = m_gpuDataTransferers[i];
@@ -317,7 +406,7 @@ namespace CNTK
         std::vector<MPI_Request> allReduceRequests(numValues);
         for (auto i = 0; i < numValues; ++i)
         {
-            auto inputValue = inputValues[i];
+            auto inputValue = valuesToAggregate[i];
 
             if (inputValue->Device() != DeviceDescriptor::CPUDevice())
             {
@@ -328,7 +417,7 @@ namespace CNTK
             auto numElements = inputValue->Shape().TotalSize();
             auto dataType = inputValue->GetDataType();
 
-            auto& outputValue = outputValues[i];
+            auto& outputValue = valuesAfterAggregate[i];
 
             assert(numElements == outputValue->Shape().TotalSize());
             assert(dataType == outputValue->GetDataType());
@@ -379,6 +468,26 @@ namespace CNTK
                 auto& transferer = m_gpuDataTransferers[idx];
                 auto& buffer = m_intermediateCPUBuffers[idx];
                 transferer->CopyCPUToGPUAsync(buffer.data.get(), size, GetDataBuffer(view));
+            }
+        }
+
+        // Unpack the continuous buffer
+        if (aggregationBufferFloat == nullptr || aggregationBufferDouble == nullptr)
+        {
+            size_t offset = 0;
+            for (size_t i : packedFloatGradientsIndex)
+            {
+                auto gradient = GetWritableMatrix<float>(outputValues[i]);
+                gradient->AssignValuesOf(aggregationBufferFloat->ColumnSlice(offset, gradient->GetNumElements()).Reshaped(gradient->GetNumRows(), gradient->GetNumCols()));
+                offset += gradient->GetNumElements();
+            }
+
+            offset = 0;
+            for (size_t i : packedDoubleGradientsIndex)
+            {
+                auto gradient = GetWritableMatrix<double>(outputValues[i]);
+                gradient->AssignValuesOf(aggregationBufferDouble->ColumnSlice(offset, gradient->GetNumElements()).Reshaped(gradient->GetNumRows(), gradient->GetNumCols()));
+                offset += gradient->GetNumElements();
             }
         }
 
