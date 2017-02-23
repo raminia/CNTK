@@ -140,7 +140,7 @@ def create_alexnet():
     }
 
 # Create trainer
-def create_trainer(network, epoch_size, num_quantization_bits):
+def create_trainer(network, epoch_size, num_quantization_bits, progress_writers):
     # Set learning parameters
     lr_per_mb         = [0.01]*25 + [0.001]*25 + [0.0001]*25 + [0.00001]*25 + [0.000001]
     lr_schedule       = cntk.learning_rate_schedule(lr_per_mb, unit=cntk.learner.UnitType.minibatch, epoch_size=epoch_size)
@@ -156,10 +156,10 @@ def create_trainer(network, epoch_size, num_quantization_bits):
         distributed_after=0)
 
     # Create trainer
-    return cntk.Trainer(network['output'], (network['ce'], network['pe']), parameter_learner)
+    return cntk.Trainer(network['output'], (network['ce'], network['pe']), parameter_learner, progress_writers)
 
 # Train and test
-def train_and_test(network, trainer, train_source, test_source, progress_printer, minibatch_size, epoch_size, restore):
+def train_and_test(network, trainer, train_source, test_source, minibatch_size, epoch_size, restore):
 
     # define mapping from intput streams to network inputs
     input_map = {
@@ -172,7 +172,6 @@ def train_and_test(network, trainer, train_source, test_source, progress_printer
         trainer = trainer,
         model_inputs_to_mb_source_mapping = input_map,
         mb_size_schedule = cntk.minibatch_size_schedule(minibatch_size),
-        progress_printer = progress_printer,
 #        checkpoint_frequency = epoch_size,
         checkpoint_filename = os.path.join(model_path, model_name),
 #        save_all_checkpoints = True,
@@ -199,10 +198,10 @@ def alexnet_train_and_eval(train_data, test_data, num_quantization_bits=32, mini
         num_epochs=max_epochs)
 
     network = create_alexnet()
-    trainer = create_trainer(network, epoch_size, num_quantization_bits)
+    trainer = create_trainer(network, epoch_size, num_quantization_bits, [progress_printer])
     train_source = create_image_mb_source(train_data, True, total_number_of_samples=max_epochs * epoch_size)
     test_source = create_image_mb_source(test_data, False, total_number_of_samples=FULL_DATA_SWEEP)
-    train_and_test(network, trainer, train_source, test_source, progress_printer, minibatch_size, epoch_size, restore)
+    train_and_test(network, trainer, train_source, test_source, minibatch_size, epoch_size, restore)
 
 
 if __name__=='__main__':
