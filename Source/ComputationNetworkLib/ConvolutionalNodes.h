@@ -81,7 +81,7 @@ public:
         fstream << (int32_t)m_imageLayout;
         fstream << m_maxTempMemSizeInSamples;
         fstream << m_transpose;
-        fstream << m_outputShape; 
+        m_outputShape.Save(fstream); 
     }
 
     void Load(File& fstream, size_t modelVersion) override
