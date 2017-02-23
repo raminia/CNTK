@@ -582,8 +582,8 @@ def convolution_transpose(convolution_map, operand, strides=(1,), sharing=[True]
     upper_pad = sanitize_shape(upper_pad)
     output_shape = sanitize_shape(output_shape)
     return convolution(convolution_map, operand, strides, sharing, auto_padding,
-                                 lower_pad, upper_pad, True, output_shape, 
-                                 max_temp_mem_size_in_samples, name)
+                       lower_pad, upper_pad, True, output_shape, 
+                       max_temp_mem_size_in_samples, name)
 
 
 @typemap
