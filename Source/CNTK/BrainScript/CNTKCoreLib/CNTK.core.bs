@@ -113,7 +113,7 @@ ConvolutionTransposeLayer {numOutputChannels,
                            autoPadding = false, 
                            lowerPad = 0, 
                            upperPad = 0, 
-						   outputShape = 0, 
+                           outputShape = 0, 
                            maxTempMemSizeInSamples = 0} =
 {
     outputChannelsShape = _AsArray (numOutputChannels)
