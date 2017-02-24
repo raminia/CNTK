@@ -24,7 +24,9 @@ def test_convolution_attributes():
         'strides': (1, 1, 1), 
         'maxTempMemSizeInSamples': 0, 
         'upperPad': (0, 0, 0), 
-        'lowerPad': (0, 0, 0)
+        'lowerPad': (0, 0, 0),
+        'transpose': False,
+        'outputShape': (0,)
         }
     _check(expected, d)
 
@@ -40,7 +42,8 @@ def test_convolution_transpose_attributes():
         'maxTempMemSizeInSamples': 0, 
         'upperPad': (0, 0, 0), 
         'lowerPad': (0, 0, 0),
-        'outputShape': (0, 0, 0)
+        'transpose': True,
+        'outputShape': (0,)
         }
     _check(expected, d)
 

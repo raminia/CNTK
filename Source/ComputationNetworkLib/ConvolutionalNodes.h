@@ -453,7 +453,7 @@ public:
                 outputShape = ConvolveGeometry::ComputeOutputShape(inputShape, m_kernelShape, m_mapCount, m_stride,
                                                                     m_sharing, m_autoPad, m_lowerPad, m_upperPad);
 
-                if (m_outputShape != TensorShape(0))    // user have explicitly set m_outputShape, we check if it's the same as outputShape
+                if (m_outputShape.GetRank() > 0 && m_outputShape != TensorShape(0))    // user have explicitly set m_outputShape, we check if it's the same as outputShape
                 {
                     if (m_outputShape != outputShape)
                     {
@@ -467,7 +467,7 @@ public:
             }
             else
             {
-                if (m_outputShape == TensorShape(0))
+                if (m_outputShape.GetRank() <= 0 || m_outputShape == TensorShape(0))
                 {
                     // In case of convolution transpose (deconvolution), node input (inputShape) is really the output of the convolution
                     // and node output (outDims) is convolution input. ConvolveGeometry does not care about deconvolutions (it does not have to).
