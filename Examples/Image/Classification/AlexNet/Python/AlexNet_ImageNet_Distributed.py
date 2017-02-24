@@ -13,6 +13,7 @@ import cntk
 import _cntk_py
 
 from cntk.utils import *
+from cntk.training_session import *
 from cntk.ops import *
 from cntk.distributed import data_parallel_distributed_learner, Communicator
 from cntk.io import ImageDeserializer, MinibatchSource, StreamDef, StreamDefs, FULL_DATA_SWEEP
@@ -168,15 +169,14 @@ def train_and_test(network, trainer, train_source, test_source, printer, minibat
     }
 
     # Train all minibatches 
-    config = cntk.SessionConfig() \
-        .progress_printing(writers=printer, frequency=epoch_size) \
-        .checkpointing(filename=os.path.join(model_path, model_name), restore=restore) \
-        .cross_validation(source=test_source, mb_size=minibatch_size)
-
-    cntk.training_session(trainer=trainer, mb_source = train_source,
-                          var_to_stream = input_map, 
-                          mb_size = minibatch_size,
-                          config=config).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=trainer, mb_source = train_source,
+                                              var_to_stream = input_map, 
+                                              mb_size = minibatch_size),
+        progress_config = ProgressConfig(writers=printer, frequency=epoch_size),
+        checkpoint_config = CheckpointConfig(filename=os.path.join(model_path, model_name), restore=restore),
+        cv_config= CrossValidationConfig(source=test_source, mb_size=minibatch_size)
+    ).train(device)
 
 # Train and evaluate the network.
 def alexnet_train_and_eval(train_data, test_data, num_quantization_bits=32, minibatch_size=256, epoch_size = 1281167, max_epochs=112,

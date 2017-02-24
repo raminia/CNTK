@@ -18,6 +18,7 @@ from cntk.learner import momentum_sgd, learning_rate_schedule, momentum_as_time_
 from _cntk_py import set_computation_network_trace_level
 from cntk.device import set_default_device, gpu
 from cntk.distributed import data_parallel_distributed_learner, block_momentum_distributed_learner, Communicator
+from cntk.training_session import *
 
 from resnet_models import *
 
@@ -113,10 +114,14 @@ def train_and_test(network, trainer, train_source, test_source, progress_printer
     if profiling:
         start_profiler(sync_gpu=True)
         
-    cntk.training_session(trainer=trainer, mb_source = train_source, 
-                          mb_size = minibatch_size,
-                          var_to_stream = input_map,
-                          config=config).train()
+    training_session(
+        training_config = TrainingConfig(trainer=trainer, mb_source = train_source, 
+                                         mb_size = minibatch_size,
+                                         var_to_stream = input_map),
+        checkpoint_config = CheckpointConfig(frequency=epoch_size, filename="ResNet_CIFAR10_DataAug", restore=False),
+        progress_config = ProgressConfig(writers=progress_printer, frequency=epoch_size),
+        cv_config = CrossValidationConfig(source=test_source, mb_size=16)
+    ).train()
     
     if profiling:
         stop_profiler()

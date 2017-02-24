@@ -116,10 +116,11 @@ def test_session_sanity_check(tmpdir, device_id):
         label: mbs.streams.labels
     }
 
-    training_session(trainer=t, mb_source=mbs,
-                     var_to_stream=input_map,
-                     mb_size=4
-                    ).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=t, mb_source=mbs,
+                                         var_to_stream=input_map,
+                                         mb_size=4)
+    ).train(device)
 
 
 def test_session_max_samples(tmpdir, device_id):
@@ -132,10 +133,11 @@ def test_session_max_samples(tmpdir, device_id):
         label: mbs.streams.labels
     }
 
-    training_session(trainer=t, mb_source=mbs,
-                     var_to_stream=input_map,
-                     mb_size=4, max_samples=20
-                    ).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=t, mb_source=mbs,
+                                         var_to_stream=input_map,
+                                         mb_size=4, max_samples=20)
+    ).train(device)
 
     assert(t.total_number_of_samples_seen == 21)
 
@@ -153,13 +155,13 @@ def test_session_cross_validation_at_end(tmpdir, device_id):
 
     writer = MockProgressWriter(expected_cv=[[92, 25]])
 
-    c = SessionConfig().progress_printing(writer) \
-            .cross_validation(source=mbs1)
-
-    training_session(trainer=t, mb_source=mbs,
-                     mb_size=4, var_to_stream=input_map,
-                     max_samples=20, config=c
-                     ).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=t, mb_source=mbs, 
+                                         mb_size=4, var_to_stream=input_map,
+                                         max_samples=20),
+        progress_config = ProgressConfig(writer),
+        cv_config = CrossValidationConfig(source=mbs1)
+    ).train(device)
 
     assert(t.total_number_of_samples_seen == 21)
     assert(writer.cv_summary_counter == 1)
@@ -178,13 +180,13 @@ def test_session_cross_validation_3_times(tmpdir, device_id):
 
     writer = MockProgressWriter(expected_cv=[[92, 25], [92, 25], [92, 25]])
 
-    c = SessionConfig().cross_validation(source=mbs1, frequency=20, mb_size=2) \
-        .progress_printing(writer)
-
-    training_session(trainer=t, mb_source=mbs, 
-                     mb_size=4, var_to_stream=input_map,
-                     max_samples=60, config=c
-                     ).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=t, mb_source=mbs, 
+                                         mb_size=4, var_to_stream=input_map,
+                                         max_samples=60),
+        progress_config = ProgressConfig(writer),
+        cv_config = CrossValidationConfig(source=mbs1, frequency=20, mb_size=2),
+    ).train(device)
 
     assert(t.total_number_of_samples_seen == 61)
     assert(writer.cv_summary_counter == 3)
@@ -208,16 +210,15 @@ def test_session_cross_validation_3_times_checkpoints_2_save_all(tmpdir, device_
 
     writer = MockProgressWriter(expected_cv=[[92, 25], [92, 25], [92, 25]])
 
-    c = SessionConfig().checkpointing(frequency=35,
-                                      filename=str(tmpdir / "checkpoint_save_all"),
-                                      preserve_all=True) \
-        .cross_validation(source=mbs1, frequency=20) \
-        .progress_printing(writer)
-
-    training_session(trainer=t, mb_source=mbs,
-                     mb_size=4, var_to_stream=input_map,
-                     max_samples=60, config=c
-                    ).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=t, mb_source=mbs,
+                                         mb_size=4, var_to_stream=input_map,
+                                         max_samples=60),
+        checkpoint_config = CheckpointConfig(frequency=35, preserve_all=True,
+                                             filename=str(tmpdir / "checkpoint_save_all")),
+        cv_config = CrossValidationConfig(source=mbs1, frequency=20),
+        progress_config = ProgressConfig(writer)
+    ).train(device)
 
     candidates = [f for f in listdir(test_dir) if isfile(
         join(test_dir, f)) and f.startswith("checkpoint_save_all")]
@@ -251,12 +252,12 @@ def test_session_progress_print(tmpdir, device_id):
 
     writer = MockProgressWriter()
 
-    c = SessionConfig().progress_printing(writer, frequency=10)
-
-    training_session(trainer=t, mb_source=mbs, 
-                     mb_size=minibatch_size_schedule(4),
-                     var_to_stream=input_map, max_samples=60,
-                     config=c).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=t, mb_source=mbs, 
+                                         mb_size=minibatch_size_schedule(4),
+                                         var_to_stream=input_map, max_samples=60),
+        progress_config = ProgressConfig(writer, frequency=10)
+    ).train(device)
 
     assert(writer.training_summary_counter == 6)
 
@@ -278,15 +279,14 @@ def test_session_restart_from_checkpoint(tmpdir, device_id):
     test_dir = str(tmpdir)
     writer = MockProgressWriter()
 
-    c = SessionConfig().checkpointing(frequency=35,
-                                      filename=str(tmpdir / "restart_from_checkpoint"),
-                                      preserve_all=True) \
-        .progress_printing(writer, frequency=35)
-
-    training_session(trainer=t, mb_source=mbs,
-                     mb_size=4, var_to_stream=input_map,
-                     max_samples=60, config=c
-                    ).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=t, mb_source=mbs,
+                                         mb_size=4, var_to_stream=input_map,
+                                         max_samples=60),
+        checkpoint_config = CheckpointConfig(frequency=35, preserve_all=True,
+                                             filename=str(tmpdir / "restart_from_checkpoint")),
+        progress_config = ProgressConfig(writer, frequency=35)
+    ).train(device)
 
     candidates = [f for f in listdir(test_dir) if isfile(
         join(test_dir, f)) and f.startswith("restart_from_checkpoint")]
@@ -317,15 +317,14 @@ def test_session_restart_from_checkpoint(tmpdir, device_id):
     # the second epoch
     writer2 = MockProgressWriter(training_summary_counter=1)
 
-    c = SessionConfig().checkpointing(frequency=35, 
-                                      filename=str(tmpdir / "saved_restart_from_checkpoint0"),
-                                      restore=True, preserve_all=True) \
-        .progress_printing(writers=writer2, frequency=35)
-
-    training_session(trainer=t, mb_source=mbs,
-                     mb_size=4, var_to_stream=input_map,
-                     max_samples=60, config=c
-                    ).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=t, mb_source=mbs,
+                                         mb_size=4, var_to_stream=input_map,
+                                         max_samples=60),
+        checkpoint_config = CheckpointConfig(frequency=35, restore=True, preserve_all= True,
+                                             filename=str(tmpdir / "saved_restart_from_checkpoint0")),
+        progress_config = ProgressConfig(writers=writer2, frequency=35)
+    ).train(device)
 
     candidates = [f for f in listdir(test_dir) if isfile(
         join(test_dir, f)) and f.startswith("saved_restart_from_checkpoint0")]
@@ -363,11 +362,11 @@ def test_session_cv_callback_3_times(tmpdir, device_id):
         counter[0] += 1
         return True
 
-    c = SessionConfig().cross_validation(frequency=20, callback=cv_callback)
-
-    training_session(trainer=t, mb_source=mbs, mb_size=4,
-                     var_to_stream=input_map, max_samples=60,
-                     config=c).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=t, mb_source=mbs, mb_size=4,
+                                         var_to_stream=input_map, max_samples=60),
+        cv_config = CrossValidationConfig(frequency=20, callback=cv_callback)
+    ).train(device)
     assert counter == [3]
 
 
@@ -397,11 +396,11 @@ def test_session_cv_callback_with_cross_validation_3_times(tmpdir, device_id):
         cv_mbs.current_position = initial_position
         return True
 
-    c = SessionConfig().cross_validation(frequency=20, callback=cv_callback)
-
-    training_session(trainer=t, mb_source=mbs, mb_size=4,
-                     var_to_stream=input_map, max_samples=60,
-                     config=c).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=t, mb_source=mbs, mb_size=4,
+                                         var_to_stream=input_map, max_samples=60),
+        cv_config = CrossValidationConfig(frequency=20, callback=cv_callback)
+    ).train(device)
 
     assert(t.total_number_of_samples_seen == 61)
 
@@ -427,9 +426,10 @@ def test_session_cv_callback_early_exit(tmpdir, device_id):
         counter[0] += 1
         return counter[0] < 1
 
-    c = SessionConfig().cross_validation(frequency=20, callback=cv_callback)
-
-    training_session(trainer=t, mb_source=mbs, mb_size=4,
-                     var_to_stream=input_map,
-                     max_samples=60, config=c).train(device)
+    training_session(
+        training_config = TrainingConfig(trainer=t, mb_source=mbs, mb_size=4,
+                                         var_to_stream=input_map,
+                                         max_samples=60),
+        cv_config = CrossValidationConfig(frequency=20, callback=cv_callback)
+    ).train(device)
     assert counter == [1]
