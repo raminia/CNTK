@@ -383,7 +383,7 @@ namespace CNTK
     // Where N is some positive integer.
     void TrainingSession::RestoreFromCheckpoint()
     {
-        assert(!m_config.m_checkPointFileName.empty());
+        assert(!m_checkpoint.m_fileName.empty());
         auto checkpoint = m_checkpoint.m_fileName;
 
         // Make sure the intermediate directories exist, so no need for further checks.
