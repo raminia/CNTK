@@ -176,7 +176,7 @@ def train_and_test(network, trainer, train_source, test_source, printer, minibat
         progress_config = ProgressConfig(writers=printer, frequency=epoch_size),
         checkpoint_config = CheckpointConfig(filename=os.path.join(model_path, model_name), restore=restore),
         cv_config= CrossValidationConfig(source=test_source, mb_size=minibatch_size)
-    ).train(device)
+    ).train()
 
 # Train and evaluate the network.
 def alexnet_train_and_eval(train_data, test_data, num_quantization_bits=32, minibatch_size=256, epoch_size = 1281167, max_epochs=112,
