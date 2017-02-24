@@ -573,10 +573,10 @@ def pooling(operand, pooling_type, pooling_window_shape, strides=(1,), auto_padd
         pooling_type: one of :const:`~cntk.ops.MAX_POOLING` or :const:`~cntk.ops.AVG_POOLING`
         pooling_window_shape: dimensions of the pooling window
         strides (default 1): strides.
-        auto_padding: automatic padding flags for each input dimension.
-        lower_pad: precise lower padding for each input dimension
-        upper_pad: precise upper padding for each input dimension
-        ceil_out_dim: ceiling while computing output size
+        auto_padding (default [False,]): automatic padding flags for each input dimension.
+        lower_pad (default (0,)): precise lower padding for each input dimension
+        upper_pad (default (0,)): precise upper padding for each input dimension
+        ceil_out_dim (default false): ceiling while computing output size
         name (str, optional): the name of the Function instance in the network
     Returns:
         :class:`~cntk.ops.functions.Function`

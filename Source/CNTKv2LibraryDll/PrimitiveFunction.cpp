@@ -417,7 +417,11 @@ namespace CNTK
                             auto lowerPad = m_attributes[PrimitiveFunction::AttributeNameLowerPad].Value<NDShape>();
                             auto upperPad = m_attributes[PrimitiveFunction::AttributeNameUpperPad].Value<NDShape>();
                             auto autoPadding = AsVector<bool>(m_attributes[PrimitiveFunction::AttributeNameAutoPadding].Value<std::vector<DictionaryValue>>());
-                            auto ceilOutDim = m_attributes[PrimitiveFunction::AttributeNameCeilOutDim].Value<bool>();
+                            bool ceilOutDim = false;
+                            if (m_attributes.Contains(PrimitiveFunction::AttributeNameCeilOutDim))
+                            {
+                                ceilOutDim = m_attributes[PrimitiveFunction::AttributeNameCeilOutDim].Value<bool>();
+                            }
                             NDShape outputMapCount = { 1 };
                             std::vector<bool> sharing = { true };
                             auto inputShape = m_inputs[0].Shape();
